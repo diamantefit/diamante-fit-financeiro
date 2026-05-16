@@ -345,7 +345,11 @@ export default function Financeiro() {
                     </span>
                     <div style={{ display: "flex", gap: 4 }}>
                       <button onClick={() => abrirEdicao(v)} style={s.actionBtn} title="Editar venda">✏️</button>
-                      <button onClick={() => excluir(v.id)} style={s.actionBtn} title="Remover venda">🗑</button>
+                      <button onClick={() => excluir(v.id)} style={{ ...s.actionBtn }} title="Remover venda">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#f87171" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+                        </svg>
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -463,6 +467,7 @@ const styles = {
   saleRow: { display: "grid", gridTemplateColumns: "75px 1fr 90px 90px 80px 58px", gap: 8, alignItems: "center", padding: "10px 0", borderBottom: "1px solid #161616", fontSize: 13 },
   saleHeader: { fontSize: 10, color: "#444", textTransform: "uppercase", letterSpacing: "0.8px", fontWeight: 700 },
   actionBtn: { background: "none", border: "none", cursor: "pointer", fontSize: 14, padding: "3px 5px", borderRadius: 4 },
+  actionBtnDelete: { background: "none", border: "none", cursor: "pointer", fontSize: 14, padding: "3px 5px", borderRadius: 4, filter: "sepia(1) saturate(5) hue-rotate(300deg) brightness(1.4)" },
   empty: { textAlign: "center", padding: "2.5rem", color: "#444", fontSize: 14 },
   cardsGrid: { display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: "1.5rem" },
   card: { background: "#111", border: "1px solid #1e1e1e", borderRadius: 12, padding: "14px 16px" },
