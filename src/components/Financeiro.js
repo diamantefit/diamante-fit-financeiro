@@ -569,4 +569,17 @@ const styles = {
   finalBox: { background: "#111", border: "1px solid #1e1e1e", borderRadius: 12, padding: "16px 20px", display: "flex", flexDirection: "column", gap: 4 },
   btnPrimary: { background: "linear-gradient(135deg, #22c55e, #16a34a)", border: "none", borderRadius: 10, padding: "13px 24px", color: "#fff", fontWeight: 700, fontSize: 15, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", flex: 1 },
   btnSecondary: { background: "#1e1e1e", border: "1px solid #2a2a2a", borderRadius: 10, padding: "13px 20px", color: "#888", fontWeight: 600, fontSize: 14, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", flexShrink: 0 },
-  filterRow
+  filterRow: { display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" },
+  filterInput: { flex: 1, minWidth: 120, background: "#111", border: "1px solid #1e1e1e", borderRadius: 8, padding: "8px 12px", color: "#f0f0f0", fontFamily: "'DM Sans', sans-serif", fontSize: 13 },
+  saleRow: { display: "grid", gridTemplateColumns: "75px 1fr 90px 90px 80px 58px", gap: 8, alignItems: "center", padding: "10px 0", borderBottom: "1px solid #161616", fontSize: 13 },
+  saleHeader: { fontSize: 10, color: "#444", textTransform: "uppercase", letterSpacing: "0.8px", fontWeight: 700 },
+  actionBtn: { background: "none", border: "none", cursor: "pointer", fontSize: 14, padding: "3px 5px", borderRadius: 4 },
+  empty: { textAlign: "center", padding: "2.5rem", color: "#444", fontSize: 14 },
+  cardsGrid: { display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: "1.5rem" },
+  card: { background: "#111", border: "1px solid #1e1e1e", borderRadius: 12, padding: "14px 16px" },
+  cardLabel: { fontSize: 11, color: "#555", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.4px" },
+  cardValue: { fontSize: 20, fontWeight: 800, fontFamily: "'Space Grotesk', sans-serif" },
+  sectionTitle: { fontSize: 11, color: "#555", textTransform: "uppercase", letterSpacing: "0.8px", fontWeight: 700, marginBottom: "1rem", marginTop: "1.5rem" },
+  modalOverlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 16 },
+  modalBox: { background: "#111", border: "1px solid #222", borderRadius: 20, padding: 24, width: "100%", maxWidth: 540 },
+};
