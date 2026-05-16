@@ -32,7 +32,13 @@ async function sbFetch(method, body = null, id = null) {
 
 const PGTO_LABEL = {
   pix: "PIX", avista: "Dinheiro", debito: "Débito",
-  credito1x: "Crédito 1x", credito3x: "Crédito 3x", credito4x: "Crédito 4x+",
+  credito1x: "Crédito 1x", credito2x: "Crédito 2x", credito3x: "Crédito 3x", credito4x: "Crédito 4x+",
+};
+
+// Taxas da máquina de cartão (você assume o custo)
+const PGTO_TAXA = {
+  pix: 0, avista: 0, debito: 0,
+  credito1x: 3.15, credito2x: 5.39, credito3x: 6.12, credito4x: 0,
 };
 
 const PGTO_COLOR = {
@@ -40,6 +46,7 @@ const PGTO_COLOR = {
   avista: { bg: "#fef3c7", text: "#92400e" },
   debito: { bg: "#dbeafe", text: "#1e40af" },
   credito1x: { bg: "#ede9fe", text: "#4c1d95" },
+  credito2x: { bg: "#ede9fe", text: "#4c1d95" },
   credito3x: { bg: "#ede9fe", text: "#4c1d95" },
   credito4x: { bg: "#fee2e2", text: "#991b1b" },
 };
@@ -82,6 +89,9 @@ function FormVenda({ inicial, onSalvar, onCancelar, btnLabel, saving }) {
   const pct = f.desconto === "5" ? 5 : f.desconto === "custom" ? parseFloat(f.descCustom) || 0 : 0;
   const vendaNum = parseFloat(f.venda) || 0;
   const finalVal = vendaNum * (1 - pct / 100);
+  const taxaMaquina = PGTO_TAXA[f.pgto] || 0;
+  const valorTaxa = finalVal * (taxaMaquina / 100);
+  const finalLiquido = finalVal - valorTaxa;
   const set = (k) => (e) => setF(prev => ({ ...prev, [k]: e.target.value }));
 
   function salvar() {
@@ -90,8 +100,8 @@ function FormVenda({ inicial, onSalvar, onCancelar, btnLabel, saving }) {
       return;
     }
     const custo = parseFloat(f.custo) || 0;
-    const lucro = custo > 0 ? finalVal - custo : null;
-    onSalvar({ ...f, custo, venda: vendaNum, desconto: pct, final: finalVal, lucro });
+    const lucro = custo > 0 ? finalLiquido - custo : null;
+    onSalvar({ ...f, custo, venda: vendaNum, desconto: pct, final: finalLiquido, lucro, taxa_maquina: taxaMaquina, valor_taxa: valorTaxa });
   }
 
   const s = styles;
@@ -130,9 +140,10 @@ function FormVenda({ inicial, onSalvar, onCancelar, btnLabel, saving }) {
             <option value="pix">PIX</option>
             <option value="avista">Dinheiro à vista</option>
             <option value="debito">Cartão de débito</option>
-            <option value="credito1x">Cartão de crédito 1x</option>
-            <option value="credito3x">Cartão de crédito 3x (sem juros)</option>
-            <option value="credito4x">Cartão de crédito 4x+</option>
+            <option value="credito1x">Crédito 1x (taxa 3,15%)</option>
+            <option value="credito2x">Crédito 2x (taxa 5,39%)</option>
+            <option value="credito3x">Crédito 3x (taxa 6,12%)</option>
+            <option value="credito4x">Crédito 4x+</option>
           </select>
         </Field>
         <Field label="Desconto">
@@ -154,11 +165,16 @@ function FormVenda({ inicial, onSalvar, onCancelar, btnLabel, saving }) {
           <div style={s.finalBox}>
             <span style={{ fontSize: 13, color: "#888" }}>Valor final{pct > 0 ? ` (${pct}% de desconto)` : ""}</span>
             <span style={{ fontSize: 26, fontWeight: 800, fontFamily: "'Space Grotesk', sans-serif", color: "#22c55e" }}>
-              R$ {fmt(finalVal)}
+              R$ {fmt(finalLiquido)}
             </span>
             {pct > 0 && f.venda && (
               <span style={{ fontSize: 12, color: "#666" }}>
                 Desconto de R$ {fmt(vendaNum - finalVal)} sobre R$ {fmt(vendaNum)}
+              </span>
+            )}
+            {taxaMaquina > 0 && f.venda && (
+              <span style={{ fontSize: 12, color: "#f97316" }}>
+                Taxa máquina {taxaMaquina}%: − R$ {fmt(valorTaxa)} · Líquido: R$ {fmt(finalLiquido)}
               </span>
             )}
           </div>
@@ -194,6 +210,8 @@ export default function Financeiro() {
   const [filAte, setFilAte] = useState("");
   const [filPgto, setFilPgto] = useState("");
   const [periodo, setPeriodo] = useState("mes");
+  const [relDe, setRelDe] = useState("");
+  const [relAte, setRelAte] = useState("");
 
   async function carregarVendas() {
     try {
@@ -305,6 +323,11 @@ export default function Financeiro() {
       if (periodo === "hoje") return d.getTime() === hj.getTime();
       if (periodo === "semana") { const s = new Date(hj); s.setDate(hj.getDate() - hj.getDay()); return d >= s; }
       if (periodo === "mes") return d.getMonth() === hj.getMonth() && d.getFullYear() === hj.getFullYear();
+      if (periodo === "custom") {
+        if (relDe && v.data < relDe) return false;
+        if (relAte && v.data > relAte) return false;
+        return true;
+      }
       return true;
     });
   }
@@ -439,13 +462,21 @@ export default function Financeiro() {
 
         {tab === "relatorio" && (
           <div>
-            <div style={{ marginBottom: "1.5rem" }}>
-              <select style={s.filterInput} value={periodo} onChange={e => setPeriodo(e.target.value)}>
+            <div style={{ display: "flex", gap: 10, marginBottom: "1.5rem", flexWrap: "wrap", alignItems: "center" }}>
+              <select style={{ ...s.filterInput, flex: "0 0 auto", minWidth: 160 }} value={periodo} onChange={e => setPeriodo(e.target.value)}>
                 <option value="hoje">Hoje</option>
                 <option value="semana">Esta semana</option>
                 <option value="mes">Este mês</option>
                 <option value="tudo">Todo o período</option>
+                <option value="custom">📅 Data personalizada</option>
               </select>
+              {periodo === "custom" && (
+                <>
+                  <input style={{ ...s.filterInput, flex: "0 0 auto" }} type="date" value={relDe} onChange={e => setRelDe(e.target.value)} />
+                  <span style={{ color: "#555", fontSize: 13 }}>até</span>
+                  <input style={{ ...s.filterInput, flex: "0 0 auto" }} type="date" value={relAte} onChange={e => setRelAte(e.target.value)} />
+                </>
+              )}
             </div>
             <div className="cards-grid" style={s.cardsGrid}>
               {[
@@ -538,17 +569,4 @@ const styles = {
   finalBox: { background: "#111", border: "1px solid #1e1e1e", borderRadius: 12, padding: "16px 20px", display: "flex", flexDirection: "column", gap: 4 },
   btnPrimary: { background: "linear-gradient(135deg, #22c55e, #16a34a)", border: "none", borderRadius: 10, padding: "13px 24px", color: "#fff", fontWeight: 700, fontSize: 15, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", flex: 1 },
   btnSecondary: { background: "#1e1e1e", border: "1px solid #2a2a2a", borderRadius: 10, padding: "13px 20px", color: "#888", fontWeight: 600, fontSize: 14, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", flexShrink: 0 },
-  filterRow: { display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" },
-  filterInput: { flex: 1, minWidth: 120, background: "#111", border: "1px solid #1e1e1e", borderRadius: 8, padding: "8px 12px", color: "#f0f0f0", fontFamily: "'DM Sans', sans-serif", fontSize: 13 },
-  saleRow: { display: "grid", gridTemplateColumns: "75px 1fr 90px 90px 80px 58px", gap: 8, alignItems: "center", padding: "10px 0", borderBottom: "1px solid #161616", fontSize: 13 },
-  saleHeader: { fontSize: 10, color: "#444", textTransform: "uppercase", letterSpacing: "0.8px", fontWeight: 700 },
-  actionBtn: { background: "none", border: "none", cursor: "pointer", fontSize: 14, padding: "3px 5px", borderRadius: 4 },
-  empty: { textAlign: "center", padding: "2.5rem", color: "#444", fontSize: 14 },
-  cardsGrid: { display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: "1.5rem" },
-  card: { background: "#111", border: "1px solid #1e1e1e", borderRadius: 12, padding: "14px 16px" },
-  cardLabel: { fontSize: 11, color: "#555", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.4px" },
-  cardValue: { fontSize: 20, fontWeight: 800, fontFamily: "'Space Grotesk', sans-serif" },
-  sectionTitle: { fontSize: 11, color: "#555", textTransform: "uppercase", letterSpacing: "0.8px", fontWeight: 700, marginBottom: "1rem", marginTop: "1.5rem" },
-  modalOverlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 16 },
-  modalBox: { background: "#111", border: "1px solid #222", borderRadius: 20, padding: 24, width: "100%", maxWidth: 540 },
-};
+  filterRow
