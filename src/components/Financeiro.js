@@ -1,25 +1,38 @@
 "use client";
 import { useState, useEffect } from "react";
 import {
-  Chart as ChartJS,
-  ArcElement,
-  Tooltip,
-  Legend,
-  CategoryScale,
-  LinearScale,
-  BarElement,
+  Chart as ChartJS, ArcElement, Tooltip, Legend,
+  CategoryScale, LinearScale, BarElement,
 } from "chart.js";
 import { Doughnut, Bar } from "react-chartjs-2";
 
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement);
 
+const SUPABASE_URL = "https://jacbtlhxienoyxipbbji.supabase.co";
+const SUPABASE_KEY = "sb_publishable_WgPScwD1G71PR-aXBBFzGw_w06-TndB";
+
+async function sbFetch(method, body = null, id = null) {
+  const url = `${SUPABASE_URL}/rest/v1/vendas${id ? `?id=eq.${id}` : ""}`;
+  const headers = {
+    "apikey": SUPABASE_KEY,
+    "Authorization": `Bearer ${SUPABASE_KEY}`,
+    "Content-Type": "application/json",
+    "Prefer": method === "POST" ? "return=representation" : "return=representation",
+  };
+  if (method === "GET") {
+    headers["Accept"] = "application/json";
+  }
+  const res = await fetch(method === "GET" ? `${SUPABASE_URL}/rest/v1/vendas?order=data.desc,created_at.desc` : url, {
+    method, headers, body: body ? JSON.stringify(body) : null,
+  });
+  if (!res.ok) throw new Error(await res.text());
+  if (method === "DELETE") return null;
+  return res.json();
+}
+
 const PGTO_LABEL = {
-  pix: "PIX",
-  avista: "Dinheiro",
-  debito: "Débito",
-  credito1x: "Crédito 1x",
-  credito3x: "Crédito 3x",
-  credito4x: "Crédito 4x+",
+  pix: "PIX", avista: "Dinheiro", debito: "Débito",
+  credito1x: "Crédito 1x", credito3x: "Crédito 3x", credito4x: "Crédito 4x+",
 };
 
 const PGTO_COLOR = {
@@ -55,7 +68,7 @@ const VENDA_VAZIA = {
   custo: "", venda: "", pgto: "pix", desconto: "5", descCustom: "", data: hoje(), obs: "",
 };
 
-function FormVenda({ inicial, onSalvar, onCancelar, btnLabel }) {
+function FormVenda({ inicial, onSalvar, onCancelar, btnLabel, saving }) {
   const [f, setF] = useState(inicial);
 
   useEffect(() => {
@@ -158,9 +171,11 @@ function FormVenda({ inicial, onSalvar, onCancelar, btnLabel }) {
       </div>
       <div style={{ display: "flex", gap: 10 }}>
         {onCancelar && (
-          <button onClick={onCancelar} style={{ ...s.btnSecondary }}>Cancelar</button>
+          <button onClick={onCancelar} style={s.btnSecondary}>Cancelar</button>
         )}
-        <button onClick={salvar} style={s.btnPrimary}>{btnLabel}</button>
+        <button onClick={salvar} disabled={saving} style={{ ...s.btnPrimary, opacity: saving ? 0.7 : 1 }}>
+          {saving ? "Salvando..." : btnLabel}
+        </button>
       </div>
     </div>
   );
@@ -168,9 +183,11 @@ function FormVenda({ inicial, onSalvar, onCancelar, btnLabel }) {
 
 export default function Financeiro() {
   const [vendas, setVendas] = useState([]);
-  const [hydrated, setHydrated] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState("nova");
   const [msg, setMsg] = useState("");
+  const [msgType, setMsgType] = useState("success");
   const [editando, setEditando] = useState(null);
 
   const [filDe, setFilDe] = useState("");
@@ -178,32 +195,89 @@ export default function Financeiro() {
   const [filPgto, setFilPgto] = useState("");
   const [periodo, setPeriodo] = useState("mes");
 
-  useEffect(() => {
-    const saved = localStorage.getItem("df-financeiro-vendas");
-    if (saved) setVendas(JSON.parse(saved));
-    setHydrated(true);
-  }, []);
+  async function carregarVendas() {
+    try {
+      const data = await sbFetch("GET");
+      setVendas(data || []);
+    } catch (e) {
+      showMsg("Erro ao carregar vendas: " + e.message, "error");
+    } finally {
+      setLoading(false);
+    }
+  }
 
-  useEffect(() => {
-    if (hydrated) localStorage.setItem("df-financeiro-vendas", JSON.stringify(vendas));
-  }, [vendas, hydrated]);
+  useEffect(() => { carregarVendas(); }, []);
 
-  function registrar(dados) {
-    setVendas(prev => [...prev, { id: Date.now(), ...dados }]);
-    setMsg("✅ Venda registrada com sucesso!");
+  function showMsg(text, type = "success") {
+    setMsg(text); setMsgType(type);
     setTimeout(() => setMsg(""), 3000);
   }
 
-  function salvarEdicao(dados) {
-    setVendas(prev => prev.map(v => v.id === editando.id ? { ...v, ...dados } : v));
-    setEditando(null);
-    setMsg("💾 Venda atualizada com sucesso!");
-    setTimeout(() => setMsg(""), 3000);
+  async function registrar(dados) {
+    setSaving(true);
+    try {
+      const nova = await sbFetch("POST", {
+        cliente: dados.cliente,
+        telefone: dados.telefone,
+        modelo: dados.modelo,
+        marca: dados.marca,
+        cor: dados.cor,
+        num: dados.num,
+        custo: dados.custo,
+        venda: dados.venda,
+        desconto: dados.desconto,
+        final: dados.final,
+        pgto: dados.pgto,
+        data: dados.data,
+        obs: dados.obs,
+        lucro: dados.lucro,
+      });
+      setVendas(prev => [nova[0], ...prev]);
+      showMsg("✅ Venda registrada com sucesso!");
+    } catch (e) {
+      showMsg("Erro ao registrar venda: " + e.message, "error");
+    } finally {
+      setSaving(false);
+    }
   }
 
-  function excluir(id) {
+  async function salvarEdicao(dados) {
+    setSaving(true);
+    try {
+      await sbFetch("PATCH", {
+        cliente: dados.cliente,
+        telefone: dados.telefone,
+        modelo: dados.modelo,
+        marca: dados.marca,
+        cor: dados.cor,
+        num: dados.num,
+        custo: dados.custo,
+        venda: dados.venda,
+        desconto: dados.desconto,
+        final: dados.final,
+        pgto: dados.pgto,
+        data: dados.data,
+        obs: dados.obs,
+        lucro: dados.lucro,
+      }, editando.id);
+      setVendas(prev => prev.map(v => v.id === editando.id ? { ...v, ...dados } : v));
+      setEditando(null);
+      showMsg("💾 Venda atualizada com sucesso!");
+    } catch (e) {
+      showMsg("Erro ao atualizar: " + e.message, "error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function excluir(id) {
     if (!confirm("Remover esta venda?")) return;
-    setVendas(prev => prev.filter(v => v.id !== id));
+    try {
+      await sbFetch("DELETE", null, id);
+      setVendas(prev => prev.filter(v => v.id !== id));
+    } catch (e) {
+      showMsg("Erro ao remover: " + e.message, "error");
+    }
   }
 
   function abrirEdicao(venda) {
@@ -222,8 +296,7 @@ export default function Financeiro() {
       if (filAte && v.data > filAte) return false;
       if (filPgto && v.pgto !== filPgto) return false;
       return true;
-    })
-    .sort((a, b) => b.data.localeCompare(a.data));
+    });
 
   function filtrarPeriodo(arr) {
     const hj = new Date(); hj.setHours(0, 0, 0, 0);
@@ -237,13 +310,13 @@ export default function Financeiro() {
   }
 
   const vendasRel = filtrarPeriodo(vendas);
-  const totalVendido = vendasRel.reduce((s, v) => s + v.final, 0);
-  const lucroTotal = vendasRel.filter(v => v.lucro != null).reduce((s, v) => s + v.lucro, 0);
+  const totalVendido = vendasRel.reduce((s, v) => s + Number(v.final), 0);
+  const lucroTotal = vendasRel.filter(v => v.lucro != null).reduce((s, v) => s + Number(v.lucro), 0);
   const qtd = vendasRel.length;
   const ticket = qtd > 0 ? totalVendido / qtd : 0;
 
   const pgtoMap = {};
-  vendasRel.forEach(v => { pgtoMap[v.pgto] = (pgtoMap[v.pgto] || 0) + v.final; });
+  vendasRel.forEach(v => { pgtoMap[v.pgto] = (pgtoMap[v.pgto] || 0) + Number(v.final); });
   const pgtoKeys = Object.keys(pgtoMap);
 
   const chartPgtoData = {
@@ -252,14 +325,12 @@ export default function Financeiro() {
   };
 
   const diaMap = {};
-  vendasRel.forEach(v => { diaMap[v.data] = (diaMap[v.data] || 0) + v.final; });
+  vendasRel.forEach(v => { diaMap[v.data] = (diaMap[v.data] || 0) + Number(v.final); });
   const dias = Object.keys(diaMap).sort();
   const chartDiaData = {
     labels: dias.map(d => d.split("-").slice(1).reverse().join("/")),
     datasets: [{ label: "Vendas (R$)", data: dias.map(d => parseFloat(diaMap[d].toFixed(2))), backgroundColor: "#378ADD", borderColor: "#185FA5", borderWidth: 1 }],
   };
-
-  if (!hydrated) return null;
 
   const s = styles;
 
@@ -286,6 +357,9 @@ export default function Financeiro() {
           <div style={s.logoTitle}>Diamante Fit ATM</div>
           <div style={s.logoSub}>Sistema Financeiro</div>
         </div>
+        <button onClick={carregarVendas} style={{ marginLeft: "auto", background: "#1e1e1e", border: "1px solid #2a2a2a", borderRadius: 8, padding: "7px 14px", color: "#888", cursor: "pointer", fontSize: 13, fontFamily: "'DM Sans', sans-serif" }}>
+          🔄 Atualizar
+        </button>
       </div>
 
       <div style={s.tabs}>
@@ -297,7 +371,7 @@ export default function Financeiro() {
       </div>
 
       {msg && (
-        <div style={{ margin: "12px 20px 0", padding: "10px 14px", background: "#0a2e14", border: "1px solid #22c55e", borderRadius: 8, fontSize: 13, color: "#22c55e" }}>
+        <div style={{ margin: "12px 20px 0", padding: "10px 14px", background: msgType === "error" ? "#2e0a0a" : "#0a2e14", border: `1px solid ${msgType === "error" ? "#ef4444" : "#22c55e"}`, borderRadius: 8, fontSize: 13, color: msgType === "error" ? "#ef4444" : "#22c55e" }}>
           {msg}
         </div>
       )}
@@ -305,7 +379,7 @@ export default function Financeiro() {
       <div style={s.content}>
 
         {tab === "nova" && (
-          <FormVenda inicial={VENDA_VAZIA} onSalvar={registrar} btnLabel="✅ Registrar venda" />
+          <FormVenda inicial={VENDA_VAZIA} onSalvar={registrar} btnLabel="✅ Registrar venda" saving={saving} />
         )}
 
         {tab === "vendas" && (
@@ -319,7 +393,9 @@ export default function Financeiro() {
               </select>
             </div>
 
-            {vendasFiltradas.length === 0 ? (
+            {loading ? (
+              <div style={s.empty}>Carregando vendas... ⏳</div>
+            ) : vendasFiltradas.length === 0 ? (
               <div style={s.empty}>Nenhuma venda encontrada.</div>
             ) : (
               <>
@@ -331,7 +407,7 @@ export default function Financeiro() {
                 </div>
                 {vendasFiltradas.map(v => (
                   <div key={v.id} className="sale-row" style={s.saleRow}>
-                    <span style={{ color: "#888", fontSize: 12 }}>{v.data.split("-").reverse().join("/")}</span>
+                    <span style={{ color: "#888", fontSize: 12 }}>{v.data?.split("-").reverse().join("/")}</span>
                     <div>
                       <div style={{ fontWeight: 600, fontSize: 13 }}>{v.modelo}</div>
                       <div style={{ fontSize: 11, color: "#666" }}>{v.marca} · N°{v.num} · {v.cor}</div>
@@ -345,7 +421,7 @@ export default function Financeiro() {
                     </span>
                     <div style={{ display: "flex", gap: 4 }}>
                       <button onClick={() => abrirEdicao(v)} style={s.actionBtn} title="Editar venda">✏️</button>
-                      <button onClick={() => excluir(v.id)} style={{ ...s.actionBtn }} title="Remover venda">
+                      <button onClick={() => excluir(v.id)} style={s.actionBtn} title="Remover venda">
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#f87171" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                           <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
                         </svg>
@@ -354,7 +430,7 @@ export default function Financeiro() {
                   </div>
                 ))}
                 <div style={{ padding: "12px 0", textAlign: "right", fontSize: 13, color: "#888", borderTop: "1px solid #1e1e1e", marginTop: 4 }}>
-                  {vendasFiltradas.length} venda(s) · Total: <strong style={{ color: "#22c55e" }}>R$ {fmt(vendasFiltradas.reduce((s, v) => s + v.final, 0))}</strong>
+                  {vendasFiltradas.length} venda(s) · Total: <strong style={{ color: "#22c55e" }}>R$ {fmt(vendasFiltradas.reduce((s, v) => s + Number(v.final), 0))}</strong>
                 </div>
               </>
             )}
@@ -415,7 +491,6 @@ export default function Financeiro() {
         )}
       </div>
 
-      {/* MODAL DE EDIÇÃO */}
       {editando && (
         <div style={s.modalOverlay} onClick={e => { if (e.target === e.currentTarget) setEditando(null); }}>
           <div style={s.modalBox}>
@@ -429,6 +504,7 @@ export default function Financeiro() {
                 onSalvar={salvarEdicao}
                 onCancelar={() => setEditando(null)}
                 btnLabel="💾 Salvar alterações"
+                saving={saving}
               />
             </div>
           </div>
@@ -467,7 +543,6 @@ const styles = {
   saleRow: { display: "grid", gridTemplateColumns: "75px 1fr 90px 90px 80px 58px", gap: 8, alignItems: "center", padding: "10px 0", borderBottom: "1px solid #161616", fontSize: 13 },
   saleHeader: { fontSize: 10, color: "#444", textTransform: "uppercase", letterSpacing: "0.8px", fontWeight: 700 },
   actionBtn: { background: "none", border: "none", cursor: "pointer", fontSize: 14, padding: "3px 5px", borderRadius: 4 },
-  actionBtnDelete: { background: "none", border: "none", cursor: "pointer", fontSize: 14, padding: "3px 5px", borderRadius: 4, filter: "sepia(1) saturate(5) hue-rotate(300deg) brightness(1.4)" },
   empty: { textAlign: "center", padding: "2.5rem", color: "#444", fontSize: 14 },
   cardsGrid: { display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: "1.5rem" },
   card: { background: "#111", border: "1px solid #1e1e1e", borderRadius: 12, padding: "14px 16px" },
